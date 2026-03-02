@@ -1,409 +1,985 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-Search,
-Download,
-Play,
-Square,
-AlertCircle,
-CheckCircle2,
-Clock,
-Globe,
-Layers,
-Hash,
-ExternalLink,
-Filter,
-ChevronLeft,
-ChevronRight,
-ChevronsLeft,
-ChevronsRight,
-Activity,
-BarChart3,
-Link2,
-Trash2,
-TrendingUp,
-FileText
-} from 'lucide-react';
+<!doctype html>
+<html lang="zh-TW" class="h-full">
 
-// --- 模擬爬蟲邏輯 ---
-const simulateFetch = async (url, depth) => {
-await new Promise(resolve => setTimeout(resolve, 400 + Math.random() * 400));
-const isSuccess = Math.random() > 0.15;
-const size = Math.floor(Math.random() * 800) + 20;
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LuminaCrawler</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap"
+    rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-glow {
 
-return {
-name: `網頁標題 - ${url.split('/').pop() || '首頁'}`,
-url: url,
-size: `${size} KB`,
-status: isSuccess ? '正常' : '網頁失效',
-note: isSuccess ? '200 OK' : '404 Not Found',
-time: new Date().toLocaleString(),
-depth: depth
-};
-};
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+      }
 
-const App = () => {
-const [targetUrl, setTargetUrl] = useState('www.tcu.edu.tw');
-const [depth, setDepth] = useState(10);
-const [maxPages, setMaxPages] = useState(1000);
-const [isCrawling, setIsCrawling] = useState(false);
-const [results, setResults] = useState([]);
-const [searchTerm, setSearchTerm] = useState('');
-const [filterStatus, setFilterStatus] = useState('全部');
-const [progress, setProgress] = useState(0);
-const [currentScanning, setCurrentScanning] = useState('');
-const [isXlsxLoaded, setIsXlsxLoaded] = useState(false);
+      50% {
+        box-shadow: 0 0 0 8px rgba(99, 102, 241, 0);
+      }
+    }
 
-const [currentPage, setCurrentPage] = useState(1);
-const itemsPerPage = 10;
+    @keyframes scan-line {
+      0% {
+        transform: translateX(-100%);
+      }
 
-useEffect(() => {
-const script = document.createElement('script');
-script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-script.async = true;
-script.onload = () => setIsXlsxLoaded(true);
-document.body.appendChild(script);
-return () => {
-const existingScript = document.querySelector(`script[src="${script.src}"]`);
-if (existingScript) document.body.removeChild(existingScript);
-};
-}, []);
+      100% {
+        transform: translateX(100%);
+      }
+    }
 
-const startCrawling = async () => {
-if (!targetUrl) return;
-let formattedUrl = targetUrl.trim();
-if (!formattedUrl.startsWith('http')) {
-formattedUrl = `https://${formattedUrl}`;
-}
-setIsCrawling(true);
-setResults([]);
-setProgress(0);
-setCurrentPage(1);
-let queue = [{ url: formattedUrl, currentDepth: 0 }];
-let visited = new Set();
-let tempResults = [];
-let count = 0;
-window.stopSign = false;
+    .scanning {
+      animation: pulse-glow 2s infinite;
+    }
 
-while (queue.length > 0 && count < maxPages) { if (window.stopSign) break; const { url, currentDepth }=queue.shift(); if
-  (visited.has(url) || currentDepth> depth) continue;
-  visited.add(url);
-  setCurrentScanning(url);
-  try {
-  const data = await simulateFetch(url, currentDepth);
-  tempResults = [...tempResults, { ...data, id: Date.now() + count }];
-  setResults([...tempResults]);
-  count++;
-  setProgress(Math.round((count / maxPages) * 100));
-  if (currentDepth < depth) { queue.push({ url: `${url}/node-${count}`, currentDepth: currentDepth + 1 }); } } catch
-    (error) { console.error(error); } } setIsCrawling(false); setCurrentScanning('掃描結束'); setProgress(100); }; const
-    stopCrawling=()=> { window.stopSign = true; setIsCrawling(false); };
-    const clearResults = () => { setResults([]); setProgress(0); setCurrentScanning(''); };
+    .scan-effect::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.1), transparent);
+      animation: scan-line 1.5s infinite;
+    }
 
-    const exportToExcel = () => {
-    if (!isXlsxLoaded || results.length === 0) return;
-    const XLSX = window.XLSX;
-    const ws = XLSX.utils.json_to_sheet(results.map(r => ({
-    "網頁名稱": r.name, "內容大小": r.size, "狀態": r.status, "狀態說明": r.note, "深度": r.depth, "爬蟲時間": r.time
-    })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "掃描結果");
-    XLSX.writeFile(wb, `Crawler_Report_${new Date().getTime()}.xlsx`);
-    };
+    .virtual-list {
+      contain: layout style paint;
+    }
 
-    const filteredResults = useMemo(() => {
-    return results.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.url.toLowerCase().includes(searchTerm.toLowerCase());
-    return (filterStatus === '全部' || item.status === filterStatus) && matchesSearch;
-    });
-    }, [results, searchTerm, filterStatus]);
+    .data-row {
+      contain: layout style;
+    }
 
-    const totalPages = Math.ceil(filteredResults.length / itemsPerPage) || 1;
-    const paginatedResults = filteredResults.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-    const successCount = results.filter(r => r.status === '正常').length;
-    const failCount = results.filter(r => r.status !== '正常').length;
-    const successRate = results.length > 0 ? ((successCount / results.length) * 100).toFixed(0) : "0";
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
 
-    return (
-    <div className="min-h-screen bg-[#05070a] text-slate-300 font-sans pb-12 selection:bg-indigo-500/30">
+    ::-webkit-scrollbar-track {
+      background: #1e293b;
+      border-radius: 3px;
+    }
 
-      {/* 頂部導航欄 */}
-      <nav className="sticky top-0 z-50 bg-[#05070a]/90 backdrop-blur-xl border-b border-slate-800/40">
-        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    ::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+  </style>
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+
+<body class="h-full bg-slate-950 text-slate-100 font-sans overflow-auto">
+  <div id="app" class="min-h-full w-full">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
             <div
-              className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
-              <Globe className="text-white" size={24} />
+              class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">LuminaCrawler</h1>
-              <p className="text-[11px] text-slate-500 font-medium">智慧網頁狀態監測系統</p>
+              <h1 id="app-title" class="text-xl font-semibold text-white">LuminaCrawler</h1>
+              <p id="app-subtitle" class="text-xs text-slate-400">智能網頁狀態監測系統</p>
             </div>
           </div>
-          <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 shadow-inner">
-            <div className={`w-2 h-2 rounded-full ${isCrawling ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700' }`}>
+          <div class="flex items-center gap-3">
+            <div id="status-indicator"
+              class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
+              <span class="w-2 h-2 rounded-full bg-slate-500" id="status-dot"></span> <span
+                class="text-xs font-medium text-slate-400" id="status-text">待命中</span>
             </div>
-            <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-              {isCrawling ? '爬取中' : '待機中'}
-            </span>
           </div>
         </div>
-      </nav>
-
-      <div className="max-w-[1400px] mx-auto p-6 space-y-8">
-
-        {/* 1. 設定區塊 */}
-        <div
-          className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end bg-[#0a0d14]/50 p-6 rounded-2xl border border-slate-800/40">
-          <div className="lg:col-span-5 space-y-2">
-            <label className="text-xs font-bold text-slate-400">起始網址</label>
-            <div className="relative">
-              <input type="text" value={targetUrl} onChange={(e)=> setTargetUrl(e.target.value)} disabled={isCrawling}
-              className="w-full bg-[#111622] border border-slate-800 rounded-xl pl-4 pr-10 py-3 text-sm text-white
-              focus:border-indigo-500/50 outline-none transition-all"
-              />
-              <Link2 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
-            </div>
-          </div>
-          <div className="lg:col-span-2 space-y-2">
-            <label className="text-xs font-bold text-slate-400">爬取深度</label>
-            <input type="number" value={depth} onChange={(e)=> setDepth(Number(e.target.value))} disabled={isCrawling}
-            className="w-full bg-[#111622] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white
-            focus:border-indigo-500/50 outline-none"
-            />
-          </div>
-          <div className="lg:col-span-2 space-y-2">
-            <label className="text-xs font-bold text-slate-400">最大頁面數</label>
-            <input type="number" value={maxPages} onChange={(e)=> setMaxPages(Number(e.target.value))}
-            disabled={isCrawling}
-            className="w-full bg-[#111622] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white
-            focus:border-indigo-500/50 outline-none"
-            />
-          </div>
-          <div className="lg:col-span-3">
-            <button onClick={isCrawling ? stopCrawling : startCrawling} className={`w-full flex items-center
-              justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all shadow-lg ${ isCrawling
-              ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
-              : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-900/20' }`}>
-              {isCrawling ? <>
-                <Activity size={18} className="animate-spin" /> 爬取中...
-              </> : <>
-                <Play size={18} fill="currentColor" /> 開始爬取
-              </>}
-            </button>
-          </div>
+      </div>
+    </header><!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <!-- Control Panel -->
+      <section class="bg-slate-900/50 rounded-2xl border border-slate-800 p-6">
+        <div class="flex items-center gap-2 mb-5">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <h2 class="text-lg font-semibold text-white">控制台</h2>
         </div>
-
-        {/* 2. 監控中心 */}
-        <section className="bg-[#0a0d14]/80 border border-slate-800/60 rounded-2xl p-6 relative shadow-2xl">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center border border-indigo-500/20">
-                <Activity size={18} className="text-indigo-400" />
+        <div class="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-4">
+          <div class="lg:col-span-5">
+            <label class="block text-sm font-medium text-slate-300 mb-2">起始網址</label>
+            <div class="relative">
+              <input type="url" id="url-input" placeholder="https://example.com"
+                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm transition-all">
+              <div class="absolute right-3 top-1/2 -translate-y-1/2">
+                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
               </div>
-              <h2 className="text-sm font-black text-white uppercase tracking-widest">監控中心</h2>
-            </div>
-            <button onClick={stopCrawling}
-              className="flex items-center gap-2 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 px-4 py-2 rounded-xl text-xs font-bold transition-all">
-              <Square size={14} fill="currentColor" /> 停止
-            </button>
-          </div>
-
-          <div className="space-y-6">
-            <div className="flex justify-between items-end">
-              <p className="text-xs font-bold text-slate-500">爬取進度</p>
-              <p className="text-sm font-black text-white font-mono">{results.length} / {maxPages}</p>
-            </div>
-            <div className="w-full bg-[#111622] h-2 rounded-full overflow-hidden border border-slate-800/50 p-0.5">
-              <div className={`h-full rounded-full transition-all duration-500 ${isCrawling
-                ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-slate-700' }`} style={{ width:
-                `${progress}%` }}></div>
-            </div>
-            <div className="bg-[#111622]/80 border border-slate-800/60 rounded-xl p-4 flex items-center gap-3">
-              <Link2 size={16} className="text-indigo-400 shrink-0" />
-              <p className="text-xs text-slate-400 font-mono truncate">{currentScanning || 'https://www.tcu.edu.tw'}</p>
             </div>
           </div>
-        </section>
-
-        {/* 3. 統計卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={<FileText size={20} />} label="總掃描數" value={results.length} color="indigo" />
-          <StatCard icon={<CheckCircle2 size={20} />} label="正常連結" value={successCount} color="emerald" />
-          <StatCard icon={<AlertCircle size={20} />} label="失效連結" value={failCount} color="rose" />
-          <StatCard icon={<TrendingUp size={20} />} label="成功率" value={`${successRate}%`} color="amber" />
+          <div class="grid grid-cols-2 gap-4 lg:col-span-4 lg:grid-cols-2">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">爬取深度</label> <input type="number"
+                id="depth-input" value="1" min="1" max="5"
+                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-center font-mono">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">最大頁面數</label> <input type="number"
+                id="max-pages-input" value="10" min="1" max="100"
+                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-center font-mono">
+            </div>
+          </div>
+          <div class="lg:col-span-3 flex items-end">
+            <button id="start-btn"
+              class="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed text-sm lg:text-base">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg><span>開始爬取</span> </button>
+          </div>
         </div>
-
-        {/* 4. 數據列表 */}
-        <section className="bg-[#0a0d14]/40 border border-slate-800/40 rounded-2xl overflow-hidden shadow-2xl">
-          <div className="p-6 border-b border-slate-800 flex flex-col xl:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-3 w-full xl:w-auto">
-              <BarChart3 size={20} className="text-indigo-400" />
-              <h2 className="text-sm font-black text-white uppercase tracking-widest">數據列表</h2>
-              <span
-                className="bg-slate-800 text-[10px] font-bold px-2 py-0.5 rounded-full text-slate-400">{results.length}
+      </section><!-- Progress Section -->
+      <section id="progress-section" class="hidden bg-slate-900/50 rounded-2xl border border-slate-800 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center scanning">
+              <svg class="w-4 h-4 text-indigo-400 animate-spin" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+            <h3 class="font-semibold text-white">監控中心</h3>
+          </div><button id="stop-btn"
+            class="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+            </svg> 停止 </button>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-slate-400">爬取進度</span> <span class="text-white font-mono"><span
+                id="progress-current">0</span> / <span id="progress-total">0</span></span>
+          </div>
+          <div class="relative h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div id="progress-bar"
+              class="absolute left-0 top-0 h-full bg-gradient-to-r from-indigo-600 to-purple-500 rounded-full transition-all duration-300 scan-effect"
+              style="width: 0%"></div>
+          </div>
+          <div class="flex items-center gap-2 mt-3 p-3 bg-slate-800/50 rounded-lg">
+            <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg><span id="current-url" class="text-sm text-slate-300 font-mono truncate">等待開始...</span>
+          </div>
+        </div>
+      </section><!-- Stats Cards -->
+      <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+              <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-white" id="stat-total">0</p>
+              <p class="text-xs text-slate-400">總掃描數</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+              <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-emerald-400" id="stat-success">0</p>
+              <p class="text-xs text-slate-400">正常連結</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center">
+              <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-rose-400" id="stat-failed">0</p>
+              <p class="text-xs text-slate-400">失效連結</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-amber-400" id="stat-rate">0%</p>
+              <p class="text-xs text-slate-400">成功率</p>
+            </div>
+          </div>
+        </div>
+      </section><!-- Data Table Section -->
+      <section class="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
+        <!-- Table Header -->
+        <div class="p-4 border-b border-slate-800">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+              </svg>
+              <h3 class="font-semibold text-white">數據列表</h3><span
+                class="px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-400 rounded-full" id="data-count">0
                 筆</span>
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
-              <div className="relative group flex-1 sm:w-80">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
-                <input type="text" placeholder="搜尋網址..." value={searchTerm} onChange={(e)=>
-                setSearchTerm(e.target.value)}
-                className="w-full bg-[#111622] border border-slate-800 rounded-xl pl-12 pr-4 py-2.5 text-xs text-white
-                focus:border-indigo-500/50 outline-none transition-all"
-                />
-              </div>
-              <div className="flex gap-2">
-                <select value={filterStatus} onChange={(e)=> setFilterStatus(e.target.value)} className="bg-[#111622]
-                  border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-400 outline-none">
-                  <option value="全部">全部狀態</option>
-                  <option value="正常">正常</option>
-                  <option value="網頁失效">失效</option>
-                </select>
-                <button onClick={exportToExcel} disabled={results.length===0}
-                  className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-500 hover:text-white border border-emerald-500/20 px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all active:scale-95">
-                  <Download size={14} /> 匯出 Excel
-                </button>
-                <button onClick={clearResults}
-                  className="bg-slate-800/50 hover:bg-rose-500/10 hover:text-rose-500 border border-slate-800 px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all active:scale-95">
-                  <Trash2 size={14} /> 清除
-                </button>
-              </div>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+              <!-- Search -->
+              <div class="relative flex-1 sm:flex-auto">
+                <input type="text" id="search-input" placeholder="搜尋網址..."
+                  class="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                <svg class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none"
+                  stroke="currentColor" viewbox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div><!-- Filter --> <select id="status-filter"
+                class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="all">全部狀態</option>
+                <option value="success">正常</option>
+                <option value="failed">失效</option>
+              </select> <!-- Export --> <button id="export-btn"
+                class="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg><span class="hidden sm:inline">匯出 Excel</span><span class="sm:hidden">匯出</span> </button>
+              <!-- Clear --> <button id="clear-btn"
+                class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg><span class="hidden sm:inline">清除</span> </button>
             </div>
           </div>
-
-          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
-              <thead>
-                <tr
-                  className="bg-[#05070a]/50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-800">
-                  <th className="px-6 py-5">網頁名稱</th>
-                  <th className="px-6 py-5">內容大小</th>
-                  <th className="px-6 py-5">狀態</th>
-                  <th className="px-6 py-5">狀態說明</th>
-                  <th className="px-6 py-5 text-center">深度</th>
-                  <th className="px-6 py-5 text-right">爬蟲時間</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/40">
-                {paginatedResults.length > 0 ? paginatedResults.map((item) => (
-                <tr key={item.id} className="hover:bg-indigo-500/[0.03] transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1">
-                      <span
-                        className="font-bold text-slate-200 text-sm group-hover:text-indigo-400 transition-colors">{item.name}</span>
-                      <a href={item.url} target="_blank" rel="noreferrer"
-                        className="text-[10px] text-slate-500 hover:text-indigo-400 font-mono truncate max-w-[350px]">
-                        {item.url}
-                      </a>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-xs font-mono text-slate-500">{item.size}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black
-                      uppercase ${item.status==='正常' ? 'bg-emerald-500/10 text-emerald-500'
-                      : 'bg-rose-500/10 text-rose-500' }`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${item.status==='正常' ? 'bg-emerald-500' : 'bg-rose-500'
-                        }`}></div>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-[10px] font-mono text-slate-400">{item.note}</td>
-                  <td className="px-6 py-4 text-center">
-                    <span
-                      className="bg-slate-800 px-2 py-0.5 rounded text-[10px] font-mono text-slate-500">{item.depth}</span>
-                  </td>
-                  <td className="px-6 py-4 text-right text-[10px] text-slate-500 font-mono">
-                    {item.time}
-                  </td>
-                </tr>
-                )) : (
-                <tr>
-                  <td colSpan="6"
-                    className="px-6 py-32 text-center text-slate-700 text-[10px] font-black uppercase tracking-widest opacity-20">
-                    無可用掃描日誌數據</td>
-                </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
+        </div><!-- Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-slate-800/50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">網頁名稱</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">內容大小</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">狀態</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">狀態說明</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">深度</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">爬蟲時間</th>
+              </tr>
+            </thead>
+            <tbody id="data-table-body" class="divide-y divide-slate-800">
+              <!-- Data rows will be inserted here -->
+            </tbody>
+          </table>
+        </div><!-- Empty State -->
+        <div id="empty-state" class="py-16 text-center">
+          <svg class="w-16 h-16 mx-auto text-slate-700 mb-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+          </svg>
+          <p class="text-slate-500 mb-2">尚無爬取數據</p>
+          <p class="text-sm text-slate-600">輸入網址並點擊「開始爬取」以開始監測</p>
+        </div><!-- Pagination -->
+        <div id="pagination" class="hidden overflow-x-auto">
           <div
-            className="p-6 bg-[#05070a]/30 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-6">
-            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-              頁面 {currentPage} / {totalPages} (共 {filteredResults.length} 筆)
-            </p>
-            <div className="flex items-center gap-2">
-              <button onClick={()=> setCurrentPage(1)} disabled={currentPage === 1} className="p-2.5 rounded-xl border
-                border-slate-800 text-slate-500 hover:text-white disabled:opacity-10 transition-all">
-                <ChevronsLeft size={16} />
-              </button>
-              <button onClick={()=> setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                className="p-2.5 rounded-xl border border-slate-800 text-slate-500 hover:text-white disabled:opacity-10
-                transition-all">
-                <ChevronLeft size={16} />
-              </button>
-              <div className="flex gap-1 mx-2">
-                {[...Array(Math.min(3, totalPages))].map((_, i) => {
-                let p = totalPages <= 3 ? i + 1 : (currentPage <=2 ? i + 1 : (currentPage>= totalPages - 1 ? totalPages
-                  - 2 + i : currentPage - 1 + i));
-                  if (p > totalPages) return null;
-                  return (
-                  <button key={p} onClick={()=> setCurrentPage(p)} className={`w-9 h-9 rounded-xl text-xs font-black
-                    transition-all ${currentPage === p ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' :
-                    'text-slate-500 hover:text-slate-300'}`}>{p}</button>
-                  );
-                  })}
-              </div>
-              <button onClick={()=> setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage ===
-                totalPages} className="p-2.5 rounded-xl border border-slate-800 text-slate-500 hover:text-white
-                disabled:opacity-10 transition-all">
-                <ChevronRight size={16} />
-              </button>
-              <button onClick={()=> setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="p-2.5
-                rounded-xl border border-slate-800 text-slate-500 hover:text-white disabled:opacity-10 transition-all">
-                <ChevronsRight size={16} />
-              </button>
+            class="px-4 py-3 border-t border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-slate-400">顯示 <span id="page-start">1</span> - <span id="page-end">10</span>，共 <span
+                id="page-total">0</span> 筆</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="prev-page"
+                class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                上一頁 </button>
+              <div id="page-numbers" class="flex flex-wrap items-center gap-1">
+                <!-- Page numbers will be inserted here -->
+              </div><button id="next-page"
+                class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                下一頁 </button>
             </div>
           </div>
-        </section>
-      </div>
-
-      <style dangerouslySetInnerHTML={{ __html: ` @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; } ::-webkit-scrollbar { width: 6px;
-        height: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background:
-        #1e293b; border-radius: 6px; } input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } `}} />
-    </div>
-    );
-    };
-
-    // 輔助組件：統計卡片
-    const StatCard = ({ icon, label, value, color }) => {
-    const colors = {
-    indigo: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
-    emerald: "bg-emerald-500/10 border-emerald-500/20 text-emerald-500",
-    rose: "bg-rose-500/10 border-rose-500/20 text-rose-500",
-    amber: "bg-amber-500/10 border-amber-500/20 text-amber-500"
-    };
-
-    return (
-    <div
-      className="bg-[#0a0d14]/60 p-5 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-4 transition-all hover:border-slate-700">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${colors[color]}`}>
-        {icon}
-      </div>
-      <div>
-        <div className="text-2xl font-black text-white">{value}</div>
-        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{label}</div>
+        </div>
+      </section>
+    </main><!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 space-y-2"></div><!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" id="modal-backdrop"></div>
+      <div class="relative bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-md w-full shadow-xl">
+        <h3 class="text-lg font-semibold text-white mb-2">確認清除數據</h3>
+        <p class="text-slate-400 mb-6">此操作將清除所有爬取記錄，確定要繼續嗎？</p>
+        <div class="flex items-center justify-end gap-3">
+          <button id="cancel-delete"
+            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors">
+            取消 </button> <button id="confirm-delete"
+            class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-medium transition-colors">
+            確認清除 </button>
+        </div>
       </div>
     </div>
-    );
+  </div>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script>
+    // Application State
+    const state = {
+      crawledData: [],
+      filteredData: [],
+      currentPage: 1,
+      pageSize: 15,
+      isCrawling: false,
+      searchQuery: '',
+      statusFilter: 'all'
     };
 
-    export default App;
+    // Default Configuration
+    const defaultConfig = {
+      app_title: 'LuminaCrawler',
+      subtitle: '智慧網頁狀態監測系統',
+      background_color: '#020617',
+      surface_color: '#0f172a',
+      text_color: '#f1f5f9',
+      primary_color: '#6366f1',
+      accent_color: '#10b981',
+      font_family: 'Inter',
+      font_size: 16
+    };
+
+    // DOM Elements
+    const elements = {
+      urlInput: document.getElementById('url-input'),
+      depthInput: document.getElementById('depth-input'),
+      maxPagesInput: document.getElementById('max-pages-input'),
+      startBtn: document.getElementById('start-btn'),
+      stopBtn: document.getElementById('stop-btn'),
+      progressSection: document.getElementById('progress-section'),
+      progressBar: document.getElementById('progress-bar'),
+      progressCurrent: document.getElementById('progress-current'),
+      progressTotal: document.getElementById('progress-total'),
+      currentUrl: document.getElementById('current-url'),
+      statusDot: document.getElementById('status-dot'),
+      statusText: document.getElementById('status-text'),
+      statTotal: document.getElementById('stat-total'),
+      statSuccess: document.getElementById('stat-success'),
+      statFailed: document.getElementById('stat-failed'),
+      statRate: document.getElementById('stat-rate'),
+      dataTableBody: document.getElementById('data-table-body'),
+      dataCount: document.getElementById('data-count'),
+      emptyState: document.getElementById('empty-state'),
+      pagination: document.getElementById('pagination'),
+      searchInput: document.getElementById('search-input'),
+      statusFilter: document.getElementById('status-filter'),
+      exportBtn: document.getElementById('export-btn'),
+      clearBtn: document.getElementById('clear-btn'),
+      appTitle: document.getElementById('app-title'),
+      appSubtitle: document.getElementById('app-subtitle'),
+      deleteModal: document.getElementById('delete-modal'),
+      modalBackdrop: document.getElementById('modal-backdrop'),
+      cancelDelete: document.getElementById('cancel-delete'),
+      confirmDelete: document.getElementById('confirm-delete'),
+      toastContainer: document.getElementById('toast-container')
+    };
+
+    // Helper Functions
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatDate(date) {
+      const d = new Date(date);
+      return d.toLocaleString('zh-TW', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).replace(/\//g, '-');
+    }
+
+    function isValidUrl(string) {
+      try {
+        new URL(string);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
+        error: 'bg-rose-500/20 border-rose-500/50 text-rose-400',
+        info: 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400'
+      };
+      toast.className = `px-4 py-3 rounded-lg border ${colors[type]} text-sm font-medium transform transition-all duration-300 translate-x-0 opacity-100`;
+      toast.textContent = message;
+      elements.toastContainer.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Update Statistics
+    function updateStats() {
+      const total = state.crawledData.length;
+      const success = state.crawledData.filter(d => d.status === '正常').length;
+      const failed = total - success;
+      const rate = total > 0 ? Math.round((success / total) * 100) : 0;
+
+      elements.statTotal.textContent = total;
+      elements.statSuccess.textContent = success;
+      elements.statFailed.textContent = failed;
+      elements.statRate.textContent = rate + '%';
+    }
+
+    // Filter Data
+    function filterData() {
+      let filtered = [...state.crawledData];
+
+      if (state.searchQuery) {
+        const query = state.searchQuery.toLowerCase();
+        filtered = filtered.filter(d =>
+          d.url.toLowerCase().includes(query) ||
+          d.title.toLowerCase().includes(query)
+        );
+      }
+
+      if (state.statusFilter === 'success') {
+        filtered = filtered.filter(d => d.status === '正常');
+      } else if (state.statusFilter === 'failed') {
+        filtered = filtered.filter(d => d.status === '網頁失效');
+      }
+
+      state.filteredData = filtered;
+      state.currentPage = 1;
+      renderTable();
+    }
+
+    // Render Table
+    function renderTable() {
+      const start = (state.currentPage - 1) * state.pageSize;
+      const end = start + state.pageSize;
+      const pageData = state.filteredData.slice(start, end);
+
+      elements.dataCount.textContent = state.filteredData.length + ' 筆';
+
+      if (state.filteredData.length === 0) {
+        elements.emptyState.classList.remove('hidden');
+        elements.dataTableBody.innerHTML = '';
+        elements.pagination.classList.add('hidden');
+        return;
+      }
+
+      elements.emptyState.classList.add('hidden');
+      elements.pagination.classList.remove('hidden');
+
+      elements.dataTableBody.innerHTML = pageData.map(item => `
+        <tr class="data-row hover:bg-slate-800/50 transition-colors">
+          <td class="px-4 py-3">
+            <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:text-indigo-300 font-mono text-sm truncate block max-w-xs" title="${item.url}">
+              ${item.title || item.url}
+            </a>
+          </td>
+          <td class="px-4 py-3 font-mono text-sm text-slate-300">${item.size}</td>
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${item.status === '正常'
+          ? 'bg-emerald-500/20 text-emerald-400'
+          : 'bg-rose-500/20 text-rose-400'
+        }">
+              <span class="w-1.5 h-1.5 rounded-full ${item.status === '正常' ? 'bg-emerald-400' : 'bg-rose-400'}"></span>
+              ${item.status}
+            </span>
+          </td>
+          <td class="px-4 py-3 font-mono text-sm text-slate-400">${item.statusCode}</td>
+          <td class="px-4 py-3 text-center">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded bg-slate-800 text-xs font-medium text-slate-400">${item.depth}</span>
+          </td>
+          <td class="px-4 py-3 font-mono text-xs text-slate-500">${item.crawledAt}</td>
+        </tr>
+      `).join('');
+
+      // Update pagination info
+      document.getElementById('page-start').textContent = start + 1;
+      document.getElementById('page-end').textContent = Math.min(end, state.filteredData.length);
+      document.getElementById('page-total').textContent = state.filteredData.length;
+
+      // Render page numbers
+      const totalPages = Math.ceil(state.filteredData.length / state.pageSize);
+      const pageNumbers = document.getElementById('page-numbers');
+      let pages = [];
+
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= state.currentPage - 1 && i <= state.currentPage + 1)) {
+          pages.push(i);
+        } else if (pages[pages.length - 1] !== '...') {
+          pages.push('...');
+        }
+      }
+
+      pageNumbers.innerHTML = pages.map(p =>
+        p === '...'
+          ? '<span class="px-2 text-slate-500">...</span>'
+          : `<button class="w-8 h-8 rounded-lg text-sm font-medium transition-colors ${p === state.currentPage
+            ? 'bg-indigo-600 text-white'
+            : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+          }" data-page="${p}">${p}</button>`
+      ).join('');
+
+      // Update prev/next buttons
+      document.getElementById('prev-page').disabled = state.currentPage === 1;
+      document.getElementById('next-page').disabled = state.currentPage === totalPages;
+    }
+
+    // Simulated Crawling Engine
+    async function simulateCrawl(startUrl, maxDepth, maxPages) {
+      const visited = new Set();
+      const queue = [{ url: startUrl, depth: 0 }];
+      let processed = 0;
+
+      // Status codes for simulation
+      const statusCodes = [
+        { code: '200 OK', weight: 70 },
+        { code: '301 Moved Permanently', weight: 5 },
+        { code: '302 Found', weight: 5 },
+        { code: '403 Forbidden', weight: 3 },
+        { code: '404 Not Found', weight: 10 },
+        { code: '500 Internal Server Error', weight: 3 },
+        { code: '503 Service Unavailable', weight: 2 },
+        { code: 'Connection Timeout', weight: 2 }
+      ];
+
+      function getRandomStatus() {
+        const total = statusCodes.reduce((sum, s) => sum + s.weight, 0);
+        let random = Math.random() * total;
+        for (const status of statusCodes) {
+          random -= status.weight;
+          if (random <= 0) return status.code;
+        }
+        return '200 OK';
+      }
+
+      function generateLinks(baseUrl, count) {
+        const paths = ['about', 'contact', 'blog', 'services', 'products', 'team', 'careers', 'faq', 'support', 'pricing', 'features', 'docs', 'api', 'terms', 'privacy'];
+        const links = [];
+        for (let i = 0; i < count; i++) {
+          const path = paths[Math.floor(Math.random() * paths.length)];
+          const subpath = Math.random() > 0.5 ? '/' + Math.random().toString(36).substr(2, 5) : '';
+          links.push(baseUrl.replace(/\/$/, '') + '/' + path + subpath);
+        }
+        return links;
+      }
+
+      elements.progressSection.classList.remove('hidden');
+      elements.progressTotal.textContent = maxPages;
+
+      while (queue.length > 0 && processed < maxPages && state.isCrawling) {
+        const { url, depth } = queue.shift();
+
+        if (visited.has(url)) continue;
+        visited.add(url);
+
+        elements.currentUrl.textContent = url;
+
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 500));
+
+        if (!state.isCrawling) break;
+
+        const statusCode = getRandomStatus();
+        const isSuccess = statusCode.startsWith('2') || statusCode.startsWith('3');
+        const size = formatBytes(Math.floor(Math.random() * 500000) + 5000);
+
+        const crawlResult = {
+          url: url,
+          title: new URL(url).pathname === '/' ? new URL(url).hostname : new URL(url).pathname.split('/').pop() || new URL(url).hostname,
+          size: size,
+          status: isSuccess ? '正常' : '網頁失效',
+          statusCode: statusCode,
+          crawledAt: formatDate(new Date()),
+          depth: depth
+        };
+
+        // Save to Data SDK
+        if (state.crawledData.length < 999) {
+          const result = await window.dataSdk.create(crawlResult);
+          if (!result.isOk) {
+            console.error('Failed to save crawl result');
+          }
+        }
+
+        processed++;
+        elements.progressCurrent.textContent = processed;
+        elements.progressBar.style.width = (processed / maxPages * 100) + '%';
+
+        // Generate child links if not at max depth
+        if (depth < maxDepth && isSuccess) {
+          const childLinks = generateLinks(url, Math.floor(Math.random() * 5) + 2);
+          childLinks.forEach(link => {
+            if (!visited.has(link)) {
+              queue.push({ url: link, depth: depth + 1 });
+            }
+          });
+        }
+      }
+
+      state.isCrawling = false;
+      updateCrawlStatus(false);
+      showToast(`爬取完成！共掃描 ${processed} 個頁面`, 'success');
+    }
+
+    // Update Crawl Status
+    function updateCrawlStatus(isCrawling) {
+      if (isCrawling) {
+        elements.statusDot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+        elements.statusText.textContent = '爬取中';
+        elements.statusText.className = 'text-xs font-medium text-emerald-400';
+        elements.startBtn.disabled = true;
+        elements.startBtn.innerHTML = `
+          <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span>爬取中...</span>
+        `;
+      } else {
+        elements.statusDot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        elements.statusText.textContent = '待命中';
+        elements.statusText.className = 'text-xs font-medium text-slate-400';
+        elements.startBtn.disabled = false;
+        elements.startBtn.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span>開始爬取</span>
+        `;
+        elements.progressSection.classList.add('hidden');
+      }
+    }
+
+    // Export to Excel
+    function exportToExcel() {
+      if (state.crawledData.length === 0) {
+        showToast('沒有可匯出的數據', 'error');
+        return;
+      }
+
+      // Prepare detail data
+      const detailData = state.crawledData.map(item => ({
+        '網頁名稱': item.title,
+        '網址': item.url,
+        '內容大小': item.size,
+        '狀態': item.status,
+        '狀態說明': item.statusCode,
+        '深度': item.depth,
+        '爬蟲時間': item.crawledAt
+      }));
+
+      // Prepare summary data
+      const total = state.crawledData.length;
+      const success = state.crawledData.filter(d => d.status === '正常').length;
+      const failed = total - success;
+      const rate = total > 0 ? Math.round((success / total) * 100) : 0;
+
+      const summaryData = [
+        { '項目': '總掃描數', '數值': total },
+        { '項目': '正常連結', '數值': success },
+        { '項目': '失效連結', '數值': failed },
+        { '項目': '成功率', '數值': rate + '%' },
+        { '項目': '匯出時間', '數值': formatDate(new Date()) }
+      ];
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Add detail sheet
+      const wsDetail = XLSX.utils.json_to_sheet(detailData);
+      XLSX.utils.book_append_sheet(wb, wsDetail, '詳細清單');
+
+      // Add summary sheet
+      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, '摘要報告');
+
+      // Download
+      XLSX.writeFile(wb, `LuminaCrawler_${formatDate(new Date()).replace(/[:\s]/g, '_')}.xlsx`);
+      showToast('Excel 檔案匯出成功！', 'success');
+    }
+
+    // Clear All Data
+    async function clearAllData() {
+      elements.deleteModal.classList.add('hidden');
+
+      // Show loading
+      elements.clearBtn.disabled = true;
+      elements.clearBtn.innerHTML = `
+        <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        清除中...
+      `;
+
+      // Delete all records
+      for (const item of state.crawledData) {
+        await window.dataSdk.delete(item);
+      }
+
+      elements.clearBtn.disabled = false;
+      elements.clearBtn.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+        清除
+      `;
+
+      showToast('所有數據已清除', 'info');
+    }
+
+    // Apply Configuration
+    function applyConfig(config) {
+      const c = { ...defaultConfig, ...config };
+
+      elements.appTitle.textContent = c.app_title;
+      elements.appSubtitle.textContent = c.subtitle;
+
+      document.body.style.backgroundColor = c.background_color;
+      document.body.style.fontFamily = `${c.font_family}, Inter, sans-serif`;
+    }
+
+    // Event Listeners
+    elements.startBtn.addEventListener('click', async () => {
+      let url = elements.urlInput.value.trim();
+      const depth = parseInt(elements.depthInput.value) || 1;
+      const maxPages = parseInt(elements.maxPagesInput.value) || 10;
+
+      if (!url) {
+        showToast('請輸入起始網址', 'error');
+        elements.urlInput.focus();
+        return;
+      }
+
+      // Auto-add https:// if not present
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+
+      if (!isValidUrl(url)) {
+        showToast('請輸入有效的網址格式', 'error');
+        elements.urlInput.focus();
+        return;
+      }
+
+      if (state.crawledData.length >= 999) {
+        showToast('已達到最大記錄數限制 (999)，請清除後再試', 'error');
+        return;
+      }
+
+      state.isCrawling = true;
+      updateCrawlStatus(true);
+      await simulateCrawl(url, depth, maxPages);
+    });
+
+    elements.stopBtn.addEventListener('click', () => {
+      state.isCrawling = false;
+      updateCrawlStatus(false);
+      showToast('爬取已停止', 'info');
+    });
+
+    elements.searchInput.addEventListener('input', (e) => {
+      state.searchQuery = e.target.value;
+      filterData();
+    });
+
+    elements.statusFilter.addEventListener('change', (e) => {
+      state.statusFilter = e.target.value;
+      filterData();
+    });
+
+    elements.exportBtn.addEventListener('click', exportToExcel);
+
+    elements.clearBtn.addEventListener('click', () => {
+      if (state.crawledData.length === 0) {
+        showToast('沒有可清除的數據', 'info');
+        return;
+      }
+      elements.deleteModal.classList.remove('hidden');
+    });
+
+    elements.cancelDelete.addEventListener('click', () => {
+      elements.deleteModal.classList.add('hidden');
+    });
+
+    elements.modalBackdrop.addEventListener('click', () => {
+      elements.deleteModal.classList.add('hidden');
+    });
+
+    elements.confirmDelete.addEventListener('click', clearAllData);
+
+    document.getElementById('prev-page').addEventListener('click', () => {
+      if (state.currentPage > 1) {
+        state.currentPage--;
+        renderTable();
+      }
+    });
+
+    document.getElementById('next-page').addEventListener('click', () => {
+      const totalPages = Math.ceil(state.filteredData.length / state.pageSize);
+      if (state.currentPage < totalPages) {
+        state.currentPage++;
+        renderTable();
+      }
+    });
+
+    document.getElementById('page-numbers').addEventListener('click', (e) => {
+      if (e.target.dataset.page) {
+        state.currentPage = parseInt(e.target.dataset.page);
+        renderTable();
+      }
+    });
+
+    // Initialize SDKs
+    async function init() {
+      // Initialize Element SDK
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig,
+          onConfigChange: async (config) => {
+            applyConfig(config);
+          },
+          mapToCapabilities: (config) => ({
+            recolorables: [
+              {
+                get: () => config.background_color || defaultConfig.background_color,
+                set: (v) => window.elementSdk.setConfig({ background_color: v })
+              },
+              {
+                get: () => config.surface_color || defaultConfig.surface_color,
+                set: (v) => window.elementSdk.setConfig({ surface_color: v })
+              },
+              {
+                get: () => config.text_color || defaultConfig.text_color,
+                set: (v) => window.elementSdk.setConfig({ text_color: v })
+              },
+              {
+                get: () => config.primary_color || defaultConfig.primary_color,
+                set: (v) => window.elementSdk.setConfig({ primary_color: v })
+              },
+              {
+                get: () => config.accent_color || defaultConfig.accent_color,
+                set: (v) => window.elementSdk.setConfig({ accent_color: v })
+              }
+            ],
+            borderables: [],
+            fontEditable: {
+              get: () => config.font_family || defaultConfig.font_family,
+              set: (v) => window.elementSdk.setConfig({ font_family: v })
+            },
+            fontSizeable: {
+              get: () => config.font_size || defaultConfig.font_size,
+              set: (v) => window.elementSdk.setConfig({ font_size: v })
+            }
+          }),
+          mapToEditPanelValues: (config) => new Map([
+            ['app_title', config.app_title || defaultConfig.app_title],
+            ['subtitle', config.subtitle || defaultConfig.subtitle]
+          ])
+        });
+      }
+
+      // Initialize Data SDK
+      if (window.dataSdk) {
+        const result = await window.dataSdk.init({
+          onDataChanged: (data) => {
+            state.crawledData = data.map(d => ({
+              ...d,
+              url: d.url,
+              title: d.title,
+              size: d.size,
+              status: d.status,
+              statusCode: d.statusCode,
+              crawledAt: d.crawledAt,
+              depth: d.depth
+            }));
+            state.filteredData = [...state.crawledData];
+            updateStats();
+            filterData();
+          }
+        });
+
+        if (!result.isOk) {
+          console.error('Failed to initialize Data SDK');
+        }
+      }
+
+      applyConfig(defaultConfig);
+    }
+
+    init();
+  </script>
+  <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9d6410b9f2de4a5a',t:'MTc3MjQ5MjkyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
+</body>
+
+</html>
